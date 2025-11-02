@@ -3,6 +3,7 @@
   "name": "Bitcoin Wallet",
   "version": "0.12.0",
   "description": "Bitcoin wallet for Chrome - Testnet support",
+  "homepage_url": "https://github.com/hwy419/bitcoin-wallet",
   "permissions": [
     "storage",
     "alarms",

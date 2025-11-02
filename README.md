@@ -2,6 +2,8 @@
 
 A Bitcoin wallet Chrome/Edge extension with testnet support. Built with React, TypeScript, and bitcoinjs-lib.
 
+**GitHub Repository:** https://github.com/hwy419/bitcoin-wallet
+
 ## Project Status
 
 **🎉 MVP COMPLETE** - Fully Functional Bitcoin Wallet (2025-10-12)

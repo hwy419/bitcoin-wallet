@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Bitcoin wallet Chrome/Edge browser extension built with React, TypeScript, and Tailwind CSS. Uses Manifest V3 and bitcoinjs-lib for Bitcoin operations. Currently targeting Bitcoin testnet.
 
+**GitHub Repository:** https://github.com/hwy419/bitcoin-wallet
+
 **Current Status**: MVP Complete (v0.4.0) - All 4 phases complete. Fully functional Bitcoin wallet for testnet.
 
 **Full technical details**: See `prompts/docs/plans/ARCHITECTURE.md`

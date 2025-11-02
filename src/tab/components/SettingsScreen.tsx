@@ -564,7 +564,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ accounts, onBack, onAcc
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-gray-400">Version</span>
-              <span className="font-semibold text-white">0.10.0</span>
+              <span className="font-semibold text-white">0.12.0</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-400">Network</span>
@@ -580,7 +580,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ accounts, onBack, onAcc
             </div>
             <div className="border-t border-gray-700 pt-3 mt-3">
               <a
-                href="https://github.com"
+                href="https://github.com/hwy419/bitcoin-wallet"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block text-sm text-bitcoin hover:text-bitcoin-hover mb-2"
@@ -588,7 +588,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ accounts, onBack, onAcc
                 GitHub Repository
               </a>
               <a
-                href="https://github.com"
+                href="https://github.com/hwy419/bitcoin-wallet#readme"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block text-sm text-bitcoin hover:text-bitcoin-hover"
