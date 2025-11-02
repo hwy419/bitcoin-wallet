@@ -69,6 +69,19 @@ All planning documents, architecture designs, and technical specifications are s
 | **TRANSACTION_LIST_PAGINATION_FILTER_DESIGN_SPEC.md** | Complete UI/UX design specification for transaction list enhancement: Filter panel design (collapsible), pagination controls layout, active filter pills, empty states, accessibility (WCAG AA), responsive design (mobile/tablet/desktop), ASCII wireframes, component specs, interaction patterns, animation timings, testing checklist | ✅ Complete |
 | **ADDRESS_LIST_ENHANCEMENT_PRD.md** | Product Requirements Document for address list enhancement (v0.12.0): Reverse chronological sort order (newest addresses first), visual "Most Recent" indicator, pagination system (10/35/50/100/500 items per page), consistent UX with transaction list, address type handling, user stories, success metrics, technical architecture, implementation plan (1.5 weeks), open questions for implementation | ✅ Complete |
 | **ADDRESS_LIST_PAGINATION_DESIGN_SPEC.md** | Complete UI/UX design specification (25,000+ words) for address list pagination & creation order display: "Most Recent" badge design (3 options analyzed, badge + border pattern selected), reverse chronological sort (newest first, all types intermixed), pagination interface (10 items default, bottom-only placement), address row layout (type badge, balance, label, creation date), relative timestamp formatting, collapsible section, component states (loading, empty, error, single address), responsive behavior (desktop/tablet/mobile), accessibility (WCAG AA, ARIA, keyboard nav, screen readers), 5 design decisions with rationale, ASCII wireframes, testing checklist | ✅ Complete |
+|| **V0.9.0_RELEASE_SUMMARY.md** | Complete release summary for v0.9.0 (tab-based architecture): Migration from popup to full-tab interface, sidebar navigation, security enhancements, single tab enforcement, testing guide references | ✅ Complete |
+|| **DEPLOYMENT_SUCCESS.md** | Deployment success report and validation checklist | ✅ Complete |
+|| **ENTROPY_AUDIT_SUMMARY.md** | Summary of seed phrase entropy and BIP39 compliance audit | ✅ Complete |
+|| **FRONTEND_METADATA_IMPLEMENTATION_STATUS.md** | Status report on frontend metadata feature implementation | ✅ Complete |
+|| **LAMBDA_PROXY_INTEGRATION_SUMMARY.md** | Summary of Lambda proxy integration with extension | ✅ Complete |
+|| **LAMBDA_PROXY_STATUS.md** | Current status and deployment state of Lambda proxy infrastructure | ✅ Complete |
+|| **MULTISIG_PHASE1_IMPLEMENTATION.md** | Phase 1 multisig implementation summary: Core backend functionality, PSBT support | ✅ Complete |
+|| **PHASE_2_MULTISIG_UI_IMPLEMENTATION.md** | Phase 2 multisig implementation: UI/UX design and frontend components | ✅ Complete |
+|| **PHASE_2_VISUAL_GUIDE.md** | Visual reference guide for Phase 2 multisig UI implementation | ✅ Complete |
+|| **PHASE_3_IMPLEMENTATION_SUMMARY.md** | Phase 3 multisig implementation: Testing, bug fixes, production readiness | ✅ Complete |
+|| **MULTISIG_CORS_FIX.md** | Fix for CORS issues in multisig xpub fetching | ✅ Complete |
+|| **MULTISIG_DUPLICATE_COSIGNER_FIX.md** | Fix for duplicate cosigner validation in multisig wizard | ✅ Complete |
+|| **MULTISIG_WIZARD_TEST_SUMMARY.md** | Summary of multisig wizard manual testing results | ✅ Complete |
 
 ### Convention
 

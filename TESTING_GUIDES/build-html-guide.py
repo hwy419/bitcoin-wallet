@@ -41,7 +41,7 @@ GUIDES = {
         {"file": "FEATURE_TESTS/13_ENCRYPTED_BACKUP.md", "title": "13. Encrypted Backup", "icon": "💾"},
     ],
     "workflows": [
-        {"file": "../PSBT_WORKFLOW_TESTING_GUIDE.md", "title": "PSBT Workflow", "icon": "🔄"},
+        {"file": "PSBT_WORKFLOW_TESTING_GUIDE.md", "title": "PSBT Workflow", "icon": "🔄"},
     ]
 }
 

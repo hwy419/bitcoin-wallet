@@ -66,7 +66,7 @@ open-guide.bat        # Windows
 ### Workflow Guides
 | Guide | Purpose |
 |-------|---------|
-| [PSBT_WORKFLOW_TESTING_GUIDE.md](../PSBT_WORKFLOW_TESTING_GUIDE.md) | Multisig PSBT coordination |
+| [PSBT_WORKFLOW_TESTING_GUIDE.md](PSBT_WORKFLOW_TESTING_GUIDE.md) | Multisig PSBT coordination |
 
 ---
 

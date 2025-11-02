@@ -88,7 +88,7 @@ This document contains all manual test plans organized by feature and release ve
 
 **Reference Documentation:**
 - **Complete Testing Guide**: `/home/michael/code_projects/bitcoin_wallet/TAB_ARCHITECTURE_TESTING_GUIDE.md`
-- **Release Summary**: `/home/michael/code_projects/bitcoin_wallet/V0.9.0_RELEASE_SUMMARY.md`
+- **Release Summary**: `/home/michael/code_projects/bitcoin_wallet/prompts/docs/plans/V0.9.0_RELEASE_SUMMARY.md`
 - **Architecture Documentation**: `prompts/docs/plans/ARCHITECTURE.md`
 
 ### Loading Tab-Based Extension in Chrome
