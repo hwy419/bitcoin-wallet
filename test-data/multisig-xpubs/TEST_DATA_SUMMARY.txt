@@ -1,0 +1,65 @@
+================================================================================
+MULTISIG TEST XPUB FILES - QUICK REFERENCE
+================================================================================
+
+Generated: 2025-10-13
+Network: Bitcoin Testnet
+Address Type: P2WSH (Native SegWit)
+Derivation Path: m/48'/1'/0'/2'
+
+================================================================================
+COSIGNER FINGERPRINTS
+================================================================================
+
+Cosigner 1: 73C5DA0A
+Cosigner 2: B8688DF1
+Cosigner 3: 28645006
+Cosigner 4: 3F635A63
+
+================================================================================
+TEST CONFIGURATIONS
+================================================================================
+
+2-of-2 Multisig:
+  ├── cosigner-1-2of2-p2wsh.json (73C5DA0A)
+  └── [Your wallet xpub]
+
+2-of-3 Multisig:
+  ├── cosigner-1-2of3-p2wsh.json (73C5DA0A)
+  ├── cosigner-2-2of3-p2wsh.json (B8688DF1)
+  └── [Your wallet xpub]
+
+3-of-5 Multisig:
+  ├── cosigner-1-3of5-p2wsh.json (73C5DA0A)
+  ├── cosigner-2-3of5-p2wsh.json (B8688DF1)
+  ├── cosigner-3-3of5-p2wsh.json (28645006)
+  ├── cosigner-4-3of5-p2wsh.json (3F635A63)
+  └── [Your wallet xpub]
+
+================================================================================
+USAGE EXAMPLE - 2-of-3 Multisig Setup
+================================================================================
+
+1. Open Bitcoin Wallet Extension
+2. Create new multisig account
+3. Select "2-of-3" configuration
+4. Select "P2WSH (Native SegWit)" address type
+5. Export YOUR xpub (download JSON file)
+6. Import cosigner-1-2of3-p2wsh.json
+7. Import cosigner-2-2of3-p2wsh.json
+8. Verify all 3 fingerprints
+9. Complete setup
+
+================================================================================
+⚠️  SECURITY WARNING
+================================================================================
+
+These xpubs are generated from WELL-KNOWN BIP39 test vectors!
+
+DO NOT USE FOR REAL BITCOIN TRANSACTIONS!
+
+Anyone can derive private keys from these test mnemonics.
+
+Use ONLY for testing the wallet extension functionality.
+
+================================================================================

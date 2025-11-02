@@ -1,0 +1,8 @@
+{
+  "xpub": "tpubDFH9dgzveyD8zTbPUFuLrGmCydNvxehyNdUXKJAQN8x4aZ4j6UZqGfnqFrD4NqyaTVGKbvEW54tsvPTK2UoSbCC1PJY8iCNiwTL3RWZEheQ",
+  "fingerprint": "73C5DA0A",
+  "configuration": "2-of-2",
+  "addressType": "p2wsh",
+  "derivationPath": "m/48'/1'/0'/2'",
+  "createdAt": "2025-10-14T01:50:14.364Z"
+}

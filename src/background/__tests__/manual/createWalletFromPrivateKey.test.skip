@@ -1,0 +1,352 @@
+/**
+ * CREATE_WALLET_FROM_PRIVATE_KEY Handler Tests
+ *
+ * @jest-environment node
+ *
+ * Isolated test suite for the CREATE_WALLET_FROM_PRIVATE_KEY message handler.
+ * These tests are separated to avoid rate limiting state pollution from other tests.
+ */
+
+import { MessageType, MessageResponse, PrivateKeyErrorCode } from '../../shared/types';
+import { WalletStorage } from '../wallet/WalletStorage';
+import { TEST_PASSWORD } from '../../__tests__/utils/testConstants';
+
+// Mock dependencies
+jest.mock('../wallet/WalletStorage');
+jest.mock('../wallet/KeyManager');
+jest.mock('../wallet/HDWallet');
+jest.mock('../wallet/AddressGenerator');
+jest.mock('../api/BlockstreamClient');
+jest.mock('../bitcoin/TransactionBuilder');
+jest.mock('../api/PriceService');
+
+// Import the background script to set up message listeners
+// NOTE: This import MUST come after mocks to ensure mocked modules are used
+require('../index');
+
+describe('CREATE_WALLET_FROM_PRIVATE_KEY Handler', () => {
+  // Test WIF keys
+  const VALID_TESTNET_WIF_COMPRESSED = 'cNJFgo1driFnPcBdBX8BrJrpxchBWXwXCvNH5SoSkdcF6JXXwHMm';
+  const VALID_TESTNET_WIF_UNCOMPRESSED = '92Qba5hnyWSn5Ffcka56yMQauaWY6ZLd91Vzxbi4a9CCetaHtYj';
+  const VALID_MAINNET_WIF_COMPRESSED = 'L5oLkpV3aqBjhki6LmvChTCV6odsp4SXM6FfU2Gppt5kFLaHLuZ9';
+  const INVALID_WIF_FORMAT = 'invalid_wif_format';
+  const INVALID_WIF_CHECKSUM = 'cNJFgo1driFnPcBdBX8BrJrpxchBWXwXCvNH5SoSkdcF6JXXwHMX';
+
+  // Helper to send a message and get response
+  const sendMessage = async (type: MessageType, payload?: any): Promise<MessageResponse> => {
+    return await (global as any).chrome.runtime.onMessage.__trigger({
+      type,
+      payload,
+    });
+  };
+
+  beforeEach(() => {
+    // Reset wallet exists check
+    (WalletStorage.hasWallet as jest.Mock).mockResolvedValue(false);
+
+    // Reset chrome storage mock
+    (global as any).chrome.storage.local.set = jest.fn().mockResolvedValue(undefined);
+  });
+
+  describe('Successful wallet creation', () => {
+    it('should create wallet from valid compressed WIF with native-segwit', async () => {
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        wif: VALID_TESTNET_WIF_COMPRESSED,
+        addressType: 'native-segwit',
+        password: TEST_PASSWORD,
+        accountName: 'Imported Account'
+      });
+
+      expect(response.success).toBe(true);
+      expect(response.data).toHaveProperty('account');
+      expect(response.data).toHaveProperty('firstAddress');
+
+      const account = response.data.account;
+      expect(account.name).toBe('Imported Account');
+      expect(account.addressType).toBe('native-segwit');
+      expect(account.importType).toBe('private-key');
+      expect(account.addresses).toHaveLength(1);
+      expect(account.addresses[0].address).toMatch(/^tb1q/); // Testnet native segwit
+
+      // Verify storage was called
+      expect((global as any).chrome.storage.local.set).toHaveBeenCalled();
+      const storedData = (global as any).chrome.storage.local.set.mock.calls[0][0];
+      expect(storedData.wallet.encryptedSeed).toBe(''); // Non-HD wallet marker
+      expect(storedData.wallet.importedKeys).toHaveProperty('0');
+    });
+
+    it('should create wallet from compressed WIF with legacy address', async () => {
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        wif: VALID_TESTNET_WIF_COMPRESSED,
+        addressType: 'legacy',
+        password: TEST_PASSWORD
+      });
+
+      expect(response.success).toBe(true);
+      expect(response.data.account.addressType).toBe('legacy');
+      expect(response.data.firstAddress).toMatch(/^[mn]/); // Testnet legacy
+    });
+
+    it('should create wallet from compressed WIF with segwit address', async () => {
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        wif: VALID_TESTNET_WIF_COMPRESSED,
+        addressType: 'segwit',
+        password: TEST_PASSWORD
+      });
+
+      expect(response.success).toBe(true);
+      expect(response.data.account.addressType).toBe('segwit');
+      expect(response.data.firstAddress).toMatch(/^2/); // Testnet segwit
+    });
+
+    it('should create wallet from uncompressed WIF with legacy address', async () => {
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        wif: VALID_TESTNET_WIF_UNCOMPRESSED,
+        addressType: 'legacy',
+        password: TEST_PASSWORD
+      });
+
+      expect(response.success).toBe(true);
+      expect(response.data.account.addressType).toBe('legacy');
+      expect(response.data.firstAddress).toMatch(/^[mn]/);
+    });
+
+    it('should use default account name when not provided', async () => {
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        wif: VALID_TESTNET_WIF_COMPRESSED,
+        addressType: 'native-segwit',
+        password: TEST_PASSWORD
+      });
+
+      expect(response.success).toBe(true);
+      expect(response.data.account.name).toBe('Account 1');
+    });
+
+    it('should store encrypted WIF in importedKeys', async () => {
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        wif: VALID_TESTNET_WIF_COMPRESSED,
+        addressType: 'native-segwit',
+        password: TEST_PASSWORD
+      });
+
+      expect(response.success).toBe(true);
+
+      const storedData = (global as any).chrome.storage.local.set.mock.calls[0][0];
+      expect(storedData.wallet.importedKeys).toHaveProperty('0');
+      expect(storedData.wallet.importedKeys[0]).toHaveProperty('encryptedData');
+      expect(storedData.wallet.importedKeys[0]).toHaveProperty('salt');
+      expect(storedData.wallet.importedKeys[0]).toHaveProperty('iv');
+      expect(storedData.wallet.importedKeys[0].type).toBe('private-key');
+    });
+
+    it('should create non-HD wallet structure with empty encryptedSeed', async () => {
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        wif: VALID_TESTNET_WIF_COMPRESSED,
+        addressType: 'native-segwit',
+        password: TEST_PASSWORD
+      });
+
+      expect(response.success).toBe(true);
+
+      const storedData = (global as any).chrome.storage.local.set.mock.calls[0][0];
+      expect(storedData.wallet.encryptedSeed).toBe(''); // Sentinel for non-HD wallet
+      expect(storedData.wallet.version).toBe(2);
+      expect(storedData.wallet.settings.network).toBe('testnet');
+    });
+  });
+
+  describe('Validation errors', () => {
+    it('should reject when WIF is missing', async () => {
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        addressType: 'native-segwit',
+        password: TEST_PASSWORD
+      });
+
+      expect(response.success).toBe(false);
+      expect(response.error).toContain('WIF, address type, and password are required');
+      expect(response.code).toBe(PrivateKeyErrorCode.VALIDATION_FAILED);
+    });
+
+    it('should reject when address type is missing', async () => {
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        wif: VALID_TESTNET_WIF_COMPRESSED,
+        password: TEST_PASSWORD
+      });
+
+      expect(response.success).toBe(false);
+      expect(response.error).toContain('WIF, address type, and password are required');
+      expect(response.code).toBe(PrivateKeyErrorCode.VALIDATION_FAILED);
+    });
+
+    it('should reject when password is missing', async () => {
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        wif: VALID_TESTNET_WIF_COMPRESSED,
+        addressType: 'native-segwit'
+      });
+
+      expect(response.success).toBe(false);
+      expect(response.error).toContain('WIF, address type, and password are required');
+      expect(response.code).toBe(PrivateKeyErrorCode.VALIDATION_FAILED);
+    });
+
+    it('should reject when password is too short', async () => {
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        wif: VALID_TESTNET_WIF_COMPRESSED,
+        addressType: 'native-segwit',
+        password: 'short'
+      });
+
+      expect(response.success).toBe(false);
+      expect(response.error).toContain('Password must be at least 8 characters');
+      expect(response.code).toBe(PrivateKeyErrorCode.VALIDATION_FAILED);
+    });
+
+    it('should reject when WIF format is invalid', async () => {
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        wif: INVALID_WIF_FORMAT,
+        addressType: 'native-segwit',
+        password: TEST_PASSWORD
+      });
+
+      expect(response.success).toBe(false);
+      expect(response.error).toContain('Invalid WIF');
+      expect(response.code).toBe(PrivateKeyErrorCode.INVALID_WIF_FORMAT);
+    });
+
+    it('should reject when WIF checksum is invalid', async () => {
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        wif: INVALID_WIF_CHECKSUM,
+        addressType: 'native-segwit',
+        password: TEST_PASSWORD
+      });
+
+      expect(response.success).toBe(false);
+      expect(response.code).toBe(PrivateKeyErrorCode.INVALID_WIF_FORMAT);
+    });
+
+    it('should reject mainnet WIF when testnet required', async () => {
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        wif: VALID_MAINNET_WIF_COMPRESSED,
+        addressType: 'native-segwit',
+        password: TEST_PASSWORD
+      });
+
+      expect(response.success).toBe(false);
+      expect(response.error).toContain('network');
+      expect(response.code).toBe(PrivateKeyErrorCode.WRONG_NETWORK);
+    });
+
+    it('should reject when wallet already exists', async () => {
+      (WalletStorage.hasWallet as jest.Mock).mockResolvedValue(true);
+
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        wif: VALID_TESTNET_WIF_COMPRESSED,
+        addressType: 'native-segwit',
+        password: TEST_PASSWORD
+      });
+
+      expect(response.success).toBe(false);
+      expect(response.error).toContain('Wallet already exists');
+      expect(response.code).toBe(PrivateKeyErrorCode.IMPORT_FAILED);
+    });
+  });
+
+  describe('Address type compatibility', () => {
+    it('should reject uncompressed key with segwit address type', async () => {
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        wif: VALID_TESTNET_WIF_UNCOMPRESSED,
+        addressType: 'segwit',
+        password: TEST_PASSWORD
+      });
+
+      expect(response.success).toBe(false);
+      expect(response.error).toContain('Uncompressed private keys can only generate Legacy');
+      expect(response.code).toBe(PrivateKeyErrorCode.VALIDATION_FAILED);
+    });
+
+    it('should reject uncompressed key with native-segwit address type', async () => {
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        wif: VALID_TESTNET_WIF_UNCOMPRESSED,
+        addressType: 'native-segwit',
+        password: TEST_PASSWORD
+      });
+
+      expect(response.success).toBe(false);
+      expect(response.error).toContain('Uncompressed private keys can only generate Legacy');
+      expect(response.code).toBe(PrivateKeyErrorCode.VALIDATION_FAILED);
+    });
+  });
+
+  describe('Wallet structure validation', () => {
+    it('should create valid non-HD wallet structure', async () => {
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        wif: VALID_TESTNET_WIF_COMPRESSED,
+        addressType: 'native-segwit',
+        password: TEST_PASSWORD,
+        accountName: 'Test Account'
+      });
+
+      expect(response.success).toBe(true);
+
+      const storedData = (global as any).chrome.storage.local.set.mock.calls[0][0];
+      const wallet = storedData.wallet;
+
+      // Verify structure
+      expect(wallet.version).toBe(2);
+      expect(wallet.encryptedSeed).toBe(''); // Non-HD marker
+      expect(wallet.salt).toBeDefined();
+      expect(wallet.iv).toBeDefined();
+      expect(wallet.accounts).toHaveLength(1);
+      expect(wallet.pendingMultisigTxs).toEqual([]);
+      expect(wallet.importedKeys).toHaveProperty('0');
+      expect(wallet.settings).toEqual({
+        autoLockMinutes: 15,
+        network: 'testnet'
+      });
+
+      // Verify account structure
+      const account = wallet.accounts[0];
+      expect(account.index).toBe(0);
+      expect(account.name).toBe('Test Account');
+      expect(account.accountType).toBe('single');
+      expect(account.addressType).toBe('native-segwit');
+      expect(account.importType).toBe('private-key');
+      expect(account.externalIndex).toBe(1);
+      expect(account.internalIndex).toBe(0);
+      expect(account.addresses).toHaveLength(1);
+
+      // Verify address structure
+      const address = account.addresses[0];
+      expect(address.address).toMatch(/^tb1q/);
+      expect(address.derivationPath).toBe('N/A');
+      expect(address.index).toBe(0);
+      expect(address.isChange).toBe(false);
+      expect(address.used).toBe(false);
+    });
+
+    it('should store encrypted WIF with proper encryption metadata', async () => {
+      const response = await sendMessage(MessageType.CREATE_WALLET_FROM_PRIVATE_KEY, {
+        wif: VALID_TESTNET_WIF_COMPRESSED,
+        addressType: 'native-segwit',
+        password: TEST_PASSWORD
+      });
+
+      expect(response.success).toBe(true);
+
+      const storedData = (global as any).chrome.storage.local.set.mock.calls[0][0];
+      const importedKey = storedData.wallet.importedKeys[0];
+
+      // Verify encryption metadata
+      expect(importedKey.encryptedData).toBeDefined();
+      expect(importedKey.encryptedData.length).toBeGreaterThan(0);
+      expect(importedKey.salt).toBeDefined();
+      expect(importedKey.iv).toBeDefined();
+      expect(importedKey.type).toBe('private-key');
+
+      // Verify it's base64 encoded
+      expect(() => atob(importedKey.encryptedData)).not.toThrow();
+      expect(() => atob(importedKey.salt)).not.toThrow();
+      expect(() => atob(importedKey.iv)).not.toThrow();
+    });
+  });
+});

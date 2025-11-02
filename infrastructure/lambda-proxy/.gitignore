@@ -1,0 +1,12 @@
+*.js
+!jest.config.js
+*.d.ts
+node_modules
+.cdk.staging
+cdk.out
+lambda/dist
+lambda/node_modules
+.env
+.env.local
+.env.*.local
+coverage

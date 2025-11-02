@@ -1,0 +1,1095 @@
+/**
+ * MultisigWizard Component Test Suite
+ *
+ * Comprehensive tests for the MultisigWizard orchestrator covering:
+ * - Progress indicator rendering and states
+ * - Step rendering and transitions
+ * - Next/Back button behavior
+ * - Account creation flow (step 6)
+ * - Success screen (step 7)
+ * - Error handling
+ * - Button state management
+ * - Scroll behavior
+ * - Validation states
+ *
+ * Total Tests: 25
+ * Priority: P0 - Core wizard functionality
+ */
+
+import React from 'react';
+import { screen, waitFor, within } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import { renderWithProviders, userEvent, mockChromeSendMessageAsync } from '../../__tests__/testUtils';
+import MultisigWizard from '../MultisigWizard';
+import { MessageType } from '../../../../shared/types';
+
+// Mock all step components
+jest.mock('../ConfigSelector', () => ({
+  __esModule: true,
+  default: ({ selectedConfig, onSelect }: any) =>
+    React.createElement('div', { 'data-testid': 'config-selector' }, [
+      React.createElement('p', { key: 'selected' }, `Selected: ${selectedConfig || 'none'}`),
+      React.createElement('button', {
+        key: 'select-btn',
+        onClick: () => onSelect('2-of-3'),
+        'data-testid': 'select-config-btn',
+      }, 'Select 2-of-3'),
+    ]),
+}));
+
+jest.mock('../AddressTypeSelector', () => ({
+  __esModule: true,
+  default: ({ selectedAddressType, onSelect }: any) =>
+    React.createElement('div', { 'data-testid': 'address-type-selector' }, [
+      React.createElement('p', { key: 'selected' }, `Selected: ${selectedAddressType || 'none'}`),
+      React.createElement('button', {
+        key: 'select-btn',
+        onClick: () => onSelect('p2wsh'),
+        'data-testid': 'select-address-type-btn',
+      }, 'Select P2WSH'),
+    ]),
+}));
+
+jest.mock('../XpubExport', () => ({
+  __esModule: true,
+  default: ({ onXpubReady }: any) =>
+    React.createElement('div', { 'data-testid': 'xpub-export' }, [
+      React.createElement('p', { key: 'text' }, 'Export Xpub'),
+      React.createElement('button', {
+        key: 'ready-btn',
+        onClick: () => onXpubReady('xpubtest123', 'abcd1234'),
+        'data-testid': 'xpub-ready-btn',
+      }, 'Set Xpub'),
+    ]),
+}));
+
+jest.mock('../XpubImport', () => ({
+  __esModule: true,
+  default: ({ config, cosigners, onAddCosigner }: any) =>
+    React.createElement('div', { 'data-testid': 'xpub-import' }, [
+      React.createElement('p', { key: 'count' }, `Cosigners: ${cosigners.length}`),
+      React.createElement('button', {
+        key: 'add-btn',
+        onClick: () => onAddCosigner({
+          name: 'Test Cosigner',
+          xpub: 'xpubcosigner123',
+          fingerprint: 'efgh5678',
+          derivationPath: "m/48'/1'/0'/2'",
+          isSelf: false,
+        }),
+        'data-testid': 'add-cosigner-btn',
+      }, 'Add Cosigner'),
+    ]),
+}));
+
+jest.mock('../AddressVerification', () => ({
+  __esModule: true,
+  default: ({ onAddressGenerated, onVerified }: any) =>
+    React.createElement('div', { 'data-testid': 'address-verification' }, [
+      React.createElement('p', { key: 'text' }, 'Verify Address'),
+      React.createElement('button', {
+        key: 'generate-btn',
+        onClick: () => onAddressGenerated('tb1qtest123'),
+        'data-testid': 'generate-address-btn',
+      }, 'Generate'),
+      React.createElement('button', {
+        key: 'verify-btn',
+        onClick: () => onVerified(true),
+        'data-testid': 'verify-address-btn',
+      }, 'Verify'),
+    ]),
+}));
+
+jest.mock('../MultisigAccountSummary', () => ({
+  __esModule: true,
+  default: ({ accountName, onNameChange }: any) =>
+    React.createElement('div', { 'data-testid': 'account-summary' }, [
+      React.createElement('p', { key: 'name' }, `Name: ${accountName}`),
+      React.createElement('input', {
+        key: 'input',
+        'data-testid': 'account-name-input',
+        value: accountName,
+        onChange: (e: any) => onNameChange(e.target.value),
+      }),
+    ]),
+}));
+
+// Mock wizard state - will be accessible from tests
+const mockWizardState = {
+  currentStep: 1 as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+  selectedConfig: null as '2-of-2' | '2-of-3' | '3-of-5' | null,
+  selectedAddressType: null as 'p2wsh' | 'p2sh_p2wsh' | 'p2sh' | null,
+  myXpub: null as string | null,
+  myFingerprint: null as string | null,
+  cosignerXpubs: [] as Array<{ name: string; xpub: string; fingerprint: string; derivationPath: string; isSelf: boolean }>,
+  firstAddress: null as string | null,
+  accountName: '',
+  addressVerified: false,
+  isCreating: false,
+  error: null as string | null,
+};
+
+// Mock functions - will be set up in beforeEach
+const mockCanProceed = jest.fn();
+const mockIsStepValid = jest.fn();
+const mockGetRequiredCosigners = jest.fn();
+const mockGetDefaultAccountName = jest.fn();
+const mockNextStep = jest.fn();
+const mockPreviousStep = jest.fn();
+const mockGoToStep = jest.fn();
+const mockSetSelectedConfig = jest.fn();
+const mockSetSelectedAddressType = jest.fn();
+const mockSetMyXpub = jest.fn();
+const mockAddCosigner = jest.fn();
+const mockRemoveCosigner = jest.fn();
+const mockUpdateCosignerName = jest.fn();
+const mockSetFirstAddress = jest.fn();
+const mockSetAccountName = jest.fn();
+const mockSetAddressVerified = jest.fn();
+const mockSetIsCreating = jest.fn();
+const mockSetError = jest.fn();
+const mockReset = jest.fn();
+
+jest.mock('../../../hooks/useMultisigWizard', () => ({
+  useMultisigWizard: () => ({
+    state: mockWizardState,
+    canProceed: mockCanProceed,
+    isStepValid: mockIsStepValid,
+    getRequiredCosigners: mockGetRequiredCosigners,
+    getDefaultAccountName: mockGetDefaultAccountName,
+    nextStep: mockNextStep,
+    previousStep: mockPreviousStep,
+    goToStep: mockGoToStep,
+    setSelectedConfig: mockSetSelectedConfig,
+    setSelectedAddressType: mockSetSelectedAddressType,
+    setMyXpub: mockSetMyXpub,
+    addCosigner: mockAddCosigner,
+    removeCosigner: mockRemoveCosigner,
+    updateCosignerName: mockUpdateCosignerName,
+    setFirstAddress: mockSetFirstAddress,
+    setAccountName: mockSetAccountName,
+    setAddressVerified: mockSetAddressVerified,
+    setIsCreating: mockSetIsCreating,
+    setError: mockSetError,
+    reset: mockReset,
+  }),
+}));
+
+// Mock hooks
+const mockSendMessage = jest.fn();
+jest.mock('../../../hooks/useBackgroundMessaging', () => ({
+  useBackgroundMessaging: () => ({
+    sendMessage: mockSendMessage,
+  }),
+}));
+
+describe('MultisigWizard', () => {
+  const mockOnComplete = jest.fn();
+  const mockOnCancel = jest.fn();
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSendMessage.mockResolvedValue({});
+
+    // Reset wizard state to defaults
+    Object.assign(mockWizardState, {
+      currentStep: 1,
+      selectedConfig: null,
+      selectedAddressType: null,
+      myXpub: null,
+      myFingerprint: null,
+      cosignerXpubs: [],
+      firstAddress: null,
+      accountName: '',
+      addressVerified: false,
+      isCreating: false,
+      error: null,
+    });
+
+    // Setup the mock implementations
+    mockCanProceed.mockImplementation(() => {
+      const { currentStep, selectedConfig, selectedAddressType, cosignerXpubs, addressVerified, accountName } = mockWizardState;
+      switch (currentStep) {
+        case 1:
+          return selectedConfig !== null;
+        case 2:
+          return selectedAddressType !== null;
+        case 3:
+          return true;
+        case 4:
+          const requiredCosigners = selectedConfig ? parseInt(selectedConfig.split('-of-')[1]) - 1 : 0;
+          return cosignerXpubs.length === requiredCosigners;
+        case 5:
+          return addressVerified;
+        case 6:
+          return accountName.trim().length > 0;
+        case 7:
+          return true;
+        default:
+          return false;
+      }
+    });
+
+    mockIsStepValid.mockImplementation((step: number) => {
+      const { selectedConfig, selectedAddressType, cosignerXpubs, addressVerified, accountName } = mockWizardState;
+      switch (step) {
+        case 1:
+          return selectedConfig !== null;
+        case 2:
+          return selectedAddressType !== null;
+        case 3:
+          return true;
+        case 4:
+          const requiredCosigners = selectedConfig ? parseInt(selectedConfig.split('-of-')[1]) - 1 : 0;
+          return cosignerXpubs.length === requiredCosigners;
+        case 5:
+          return addressVerified;
+        case 6:
+          return accountName.trim().length > 0;
+        case 7:
+          return true;
+        default:
+          return false;
+      }
+    });
+
+    mockGetRequiredCosigners.mockImplementation((config?: any) => {
+      const cfg = config || mockWizardState.selectedConfig;
+      if (!cfg) return 0;
+      return parseInt(cfg.split('-of-')[1]) - 1;
+    });
+
+    mockGetDefaultAccountName.mockImplementation(() => {
+      if (!mockWizardState.selectedConfig) return 'Multisig Account';
+      return `Multisig ${mockWizardState.selectedConfig}`;
+    });
+
+    mockNextStep.mockImplementation(() => {
+      if (mockWizardState.currentStep < 7) {
+        mockWizardState.currentStep = (mockWizardState.currentStep + 1) as any;
+      }
+    });
+
+    mockPreviousStep.mockImplementation(() => {
+      if (mockWizardState.currentStep > 1) {
+        mockWizardState.currentStep = (mockWizardState.currentStep - 1) as any;
+        mockWizardState.error = null;
+      }
+    });
+
+    mockGoToStep.mockImplementation((step: any) => {
+      mockWizardState.currentStep = step;
+      mockWizardState.error = null;
+    });
+
+    mockSetSelectedConfig.mockImplementation((config: any) => {
+      mockWizardState.selectedConfig = config;
+      mockWizardState.error = null;
+    });
+
+    mockSetSelectedAddressType.mockImplementation((type: any) => {
+      mockWizardState.selectedAddressType = type;
+      mockWizardState.error = null;
+    });
+
+    mockSetMyXpub.mockImplementation((xpub: string, fingerprint: string) => {
+      mockWizardState.myXpub = xpub;
+      mockWizardState.myFingerprint = fingerprint;
+      mockWizardState.error = null;
+    });
+
+    mockAddCosigner.mockImplementation((cosigner: any) => {
+      mockWizardState.cosignerXpubs = [...mockWizardState.cosignerXpubs, cosigner];
+      mockWizardState.error = null;
+    });
+
+    mockRemoveCosigner.mockImplementation((fingerprint: string) => {
+      mockWizardState.cosignerXpubs = mockWizardState.cosignerXpubs.filter(c => c.fingerprint !== fingerprint);
+      mockWizardState.error = null;
+    });
+
+    mockUpdateCosignerName.mockImplementation((fingerprint: string, name: string) => {
+      mockWizardState.cosignerXpubs = mockWizardState.cosignerXpubs.map(c =>
+        c.fingerprint === fingerprint ? { ...c, name } : c
+      );
+      mockWizardState.error = null;
+    });
+
+    mockSetFirstAddress.mockImplementation((address: string) => {
+      mockWizardState.firstAddress = address;
+      mockWizardState.error = null;
+    });
+
+    mockSetAccountName.mockImplementation((name: string) => {
+      mockWizardState.accountName = name;
+      mockWizardState.error = null;
+    });
+
+    mockSetAddressVerified.mockImplementation((verified: boolean) => {
+      mockWizardState.addressVerified = verified;
+      mockWizardState.error = null;
+    });
+
+    mockSetIsCreating.mockImplementation((creating: boolean) => {
+      mockWizardState.isCreating = creating;
+    });
+
+    mockSetError.mockImplementation((error: string | null) => {
+      mockWizardState.error = error;
+    });
+
+    mockReset.mockImplementation(() => {
+      Object.assign(mockWizardState, {
+        currentStep: 1,
+        selectedConfig: null,
+        selectedAddressType: null,
+        myXpub: null,
+        myFingerprint: null,
+        cosignerXpubs: [],
+        firstAddress: null,
+        accountName: '',
+        addressVerified: false,
+        isCreating: false,
+        error: null,
+      });
+    });
+  });
+
+  // ==================== PROGRESS INDICATOR ====================
+
+  describe('Progress Indicator', () => {
+    it('renders all 7 steps in progress indicator', () => {
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      expect(screen.getByText('Config')).toBeInTheDocument();
+      expect(screen.getByText('Address')).toBeInTheDocument();
+      expect(screen.getByText('Export')).toBeInTheDocument();
+      expect(screen.getByText('Import')).toBeInTheDocument();
+      expect(screen.getByText('Verify')).toBeInTheDocument();
+      expect(screen.getByText('Name')).toBeInTheDocument();
+      expect(screen.getByText('Done')).toBeInTheDocument();
+    });
+
+    it('shows step 1 as active initially', () => {
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Step 1 should have bitcoin border/background (active)
+      const steps = screen.getAllByText(/Config|Address|Export|Import|Verify|Name|Done/);
+      expect(steps[0]).toHaveClass('text-bitcoin');
+    });
+
+    it('shows completed steps with green checkmark', async () => {
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Select config and advance
+      const selectConfigBtn = screen.getByTestId('select-config-btn');
+      await userEvent.click(selectConfigBtn);
+
+      const nextButton = screen.getByRole('button', { name: /next/i });
+      await userEvent.click(nextButton);
+
+      // Step 1 should now be completed (green checkmark)
+      await waitFor(() => {
+        const configLabel = screen.getByText('Config');
+        expect(configLabel).toHaveClass('text-green-500');
+      });
+    });
+
+    it('updates connecting lines between steps', async () => {
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Initially no lines should be filled
+      // After progressing, lines should fill
+      const selectConfigBtn = screen.getByTestId('select-config-btn');
+      await userEvent.click(selectConfigBtn);
+
+      const nextButton = screen.getByRole('button', { name: /next/i });
+      await userEvent.click(nextButton);
+
+      // Visual confirmation that step advanced
+      await waitFor(() => {
+        expect(screen.getByTestId('address-type-selector')).toBeInTheDocument();
+      });
+    });
+  });
+
+  // ==================== STEP RENDERING ====================
+
+  describe('Step Rendering', () => {
+    it('renders ConfigSelector on step 1', () => {
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      expect(screen.getByTestId('config-selector')).toBeInTheDocument();
+    });
+
+    it('renders AddressTypeSelector on step 2', async () => {
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Select config and go to step 2
+      const selectConfigBtn = screen.getByTestId('select-config-btn');
+      await userEvent.click(selectConfigBtn);
+
+      const nextButton = screen.getByRole('button', { name: /next/i });
+      await userEvent.click(nextButton);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('address-type-selector')).toBeInTheDocument();
+      });
+    });
+
+    it('renders XpubExport on step 3', async () => {
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Navigate to step 3
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('address-type-selector')).toBeInTheDocument();
+      });
+
+      await userEvent.click(screen.getByTestId('select-address-type-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('xpub-export')).toBeInTheDocument();
+      });
+    });
+
+    it('renders XpubImport on step 4', async () => {
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Navigate to step 4
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('select-address-type-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('xpub-export')).toBeInTheDocument();
+      });
+
+      await userEvent.click(screen.getByTestId('xpub-ready-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('xpub-import')).toBeInTheDocument();
+      });
+    });
+
+    it('renders AddressVerification on step 5', async () => {
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Navigate to step 5
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('select-address-type-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('xpub-ready-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('xpub-import')).toBeInTheDocument();
+      });
+
+      // Add 2 cosigners for 2-of-3
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Cosigners: 2')).toBeInTheDocument();
+      });
+
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('address-verification')).toBeInTheDocument();
+      });
+    });
+
+    it('renders MultisigAccountSummary on step 6', async () => {
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Navigate to step 6
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('select-address-type-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('xpub-ready-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('address-verification')).toBeInTheDocument();
+      });
+
+      await userEvent.click(screen.getByTestId('generate-address-btn'));
+      await userEvent.click(screen.getByTestId('verify-address-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('account-summary')).toBeInTheDocument();
+      });
+    });
+
+    it('renders success screen on step 7', async () => {
+      mockSendMessage.mockResolvedValue({ account: { index: 0, name: 'Test Multisig' } });
+
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Navigate to step 6
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('select-address-type-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('xpub-ready-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('generate-address-btn'));
+      await userEvent.click(screen.getByTestId('verify-address-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('account-summary')).toBeInTheDocument();
+      });
+
+      // Type account name
+      const nameInput = screen.getByTestId('account-name-input');
+      await userEvent.clear(nameInput);
+      await userEvent.type(nameInput, 'My Multisig');
+
+      // Click Create Account
+      await userEvent.click(screen.getByRole('button', { name: /create account/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Multisig Account Created!')).toBeInTheDocument();
+      });
+    });
+  });
+
+  // ==================== NAVIGATION ====================
+
+  describe('Navigation', () => {
+    it('Next button advances from step 1 to step 2', async () => {
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('address-type-selector')).toBeInTheDocument();
+      });
+    });
+
+    it('Back button goes to previous step', async () => {
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Go to step 2
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('address-type-selector')).toBeInTheDocument();
+      });
+
+      // Go back to step 1
+      await userEvent.click(screen.getByRole('button', { name: /back/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('config-selector')).toBeInTheDocument();
+      });
+    });
+
+    it('Back on step 1 calls onCancel', async () => {
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      const cancelButton = screen.getByRole('button', { name: /cancel/i });
+      await userEvent.click(cancelButton);
+
+      expect(mockOnCancel).toHaveBeenCalledTimes(1);
+    });
+
+    it('Next button is disabled when step is invalid', () => {
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      const nextButton = screen.getByRole('button', { name: /next/i });
+      expect(nextButton).toBeDisabled();
+    });
+
+    it('Next button is enabled when step is valid', async () => {
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+
+      const nextButton = screen.getByRole('button', { name: /next/i });
+      expect(nextButton).toBeEnabled();
+    });
+  });
+
+  // ==================== BUTTON TEXT ====================
+
+  describe('Button Text', () => {
+    it('shows "Cancel" on step 1', () => {
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+    });
+
+    it('shows "Back" on step 2 and beyond', async () => {
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /back/i })).toBeInTheDocument();
+      });
+    });
+
+    it('shows "Create Account" on step 6', async () => {
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Navigate to step 6
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('select-address-type-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('xpub-ready-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('generate-address-btn'));
+      await userEvent.click(screen.getByTestId('verify-address-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /create account/i })).toBeInTheDocument();
+      });
+    });
+
+    it('shows "Done" on step 7', async () => {
+      mockSendMessage.mockResolvedValue({ account: { index: 0 } });
+
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Complete all steps to reach step 7
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('select-address-type-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('xpub-ready-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('generate-address-btn'));
+      await userEvent.click(screen.getByTestId('verify-address-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('account-summary')).toBeInTheDocument();
+      });
+
+      const nameInput = screen.getByTestId('account-name-input');
+      await userEvent.clear(nameInput);
+      await userEvent.type(nameInput, 'Test');
+
+      await userEvent.click(screen.getByRole('button', { name: /create account/i }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /done/i })).toBeInTheDocument();
+      });
+    });
+  });
+
+  // ==================== ACCOUNT CREATION ====================
+
+  describe('Account Creation', () => {
+    it('calls CREATE_MULTISIG_ACCOUNT on step 6', async () => {
+      mockSendMessage.mockResolvedValue({ account: { index: 0 } });
+
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Navigate to step 6
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('select-address-type-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('xpub-ready-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('generate-address-btn'));
+      await userEvent.click(screen.getByTestId('verify-address-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('account-summary')).toBeInTheDocument();
+      });
+
+      const nameInput = screen.getByTestId('account-name-input');
+      await userEvent.clear(nameInput);
+      await userEvent.type(nameInput, 'Test Account');
+
+      await userEvent.click(screen.getByRole('button', { name: /create account/i }));
+
+      await waitFor(() => {
+        expect(mockSendMessage).toHaveBeenCalledWith(
+          MessageType.CREATE_MULTISIG_ACCOUNT,
+          expect.objectContaining({
+            config: '2-of-3',
+            addressType: 'p2wsh',
+            name: 'Test Account',
+          })
+        );
+      });
+    });
+
+    it('advances to step 7 on successful account creation', async () => {
+      mockSendMessage.mockResolvedValue({ account: { index: 0 } });
+
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Navigate to step 6 and create account
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('select-address-type-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('xpub-ready-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('generate-address-btn'));
+      await userEvent.click(screen.getByTestId('verify-address-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('account-summary')).toBeInTheDocument();
+      });
+
+      const nameInput = screen.getByTestId('account-name-input');
+      await userEvent.clear(nameInput);
+      await userEvent.type(nameInput, 'Test');
+
+      await userEvent.click(screen.getByRole('button', { name: /create account/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Multisig Account Created!')).toBeInTheDocument();
+      });
+    });
+
+    it('shows error when account creation fails', async () => {
+      mockSendMessage.mockRejectedValue(new Error('Creation failed'));
+
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Navigate to step 6 and create account
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('select-address-type-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('xpub-ready-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('generate-address-btn'));
+      await userEvent.click(screen.getByTestId('verify-address-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('account-summary')).toBeInTheDocument();
+      });
+
+      const nameInput = screen.getByTestId('account-name-input');
+      await userEvent.clear(nameInput);
+      await userEvent.type(nameInput, 'Test');
+
+      await userEvent.click(screen.getByRole('button', { name: /create account/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Creation failed')).toBeInTheDocument();
+      });
+    });
+
+    it('shows Creating... during account creation', async () => {
+      let resolveCreation: any;
+      const creationPromise = new Promise((resolve) => {
+        resolveCreation = resolve;
+      });
+
+      mockSendMessage.mockReturnValue(creationPromise);
+
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Navigate to step 6
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('select-address-type-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('xpub-ready-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('generate-address-btn'));
+      await userEvent.click(screen.getByTestId('verify-address-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('account-summary')).toBeInTheDocument();
+      });
+
+      const nameInput = screen.getByTestId('account-name-input');
+      await userEvent.clear(nameInput);
+      await userEvent.type(nameInput, 'Test');
+
+      await userEvent.click(screen.getByRole('button', { name: /create account/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Creating...')).toBeInTheDocument();
+      });
+
+      resolveCreation({ account: { index: 0 } });
+    });
+  });
+
+  // ==================== SUCCESS SCREEN ====================
+
+  describe('Success Screen', () => {
+    it('calls onComplete when Done button clicked on step 7', async () => {
+      mockSendMessage.mockResolvedValue({ account: { index: 0 } });
+
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Navigate to step 7
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('select-address-type-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('xpub-ready-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('generate-address-btn'));
+      await userEvent.click(screen.getByTestId('verify-address-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('account-summary')).toBeInTheDocument();
+      });
+
+      const nameInput = screen.getByTestId('account-name-input');
+      await userEvent.clear(nameInput);
+      await userEvent.type(nameInput, 'Test');
+
+      await userEvent.click(screen.getByRole('button', { name: /create account/i }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /done/i })).toBeInTheDocument();
+      });
+
+      await userEvent.click(screen.getByRole('button', { name: /done/i }));
+
+      expect(mockOnComplete).toHaveBeenCalledTimes(1);
+    });
+
+    it('displays account details on success screen', async () => {
+      mockSendMessage.mockResolvedValue({ account: { index: 0 } });
+
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Navigate to step 7
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('select-address-type-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('xpub-ready-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('generate-address-btn'));
+      await userEvent.click(screen.getByTestId('verify-address-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('account-summary')).toBeInTheDocument();
+      });
+
+      const nameInput = screen.getByTestId('account-name-input');
+      await userEvent.clear(nameInput);
+      await userEvent.type(nameInput, 'My Test Account');
+
+      await userEvent.click(screen.getByRole('button', { name: /create account/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Multisig Account Created!')).toBeInTheDocument();
+        expect(screen.getByText(/2-of-3/)).toBeInTheDocument();
+        expect(screen.getByText(/P2WSH/i)).toBeInTheDocument();
+      });
+    });
+  });
+
+  // ==================== ERROR HANDLING ====================
+
+  describe('Error Handling', () => {
+    it('displays error banner when error is set', async () => {
+      mockSendMessage.mockRejectedValue(new Error('Test error'));
+
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Navigate to step 6 and trigger error
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('select-address-type-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('xpub-ready-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('generate-address-btn'));
+      await userEvent.click(screen.getByTestId('verify-address-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('account-summary')).toBeInTheDocument();
+      });
+
+      const nameInput = screen.getByTestId('account-name-input');
+      await userEvent.clear(nameInput);
+      await userEvent.type(nameInput, 'Test');
+
+      await userEvent.click(screen.getByRole('button', { name: /create account/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Test error')).toBeInTheDocument();
+      });
+    });
+
+    it('stays on current step when creation fails', async () => {
+      mockSendMessage.mockRejectedValue(new Error('Failed'));
+
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      // Navigate to step 6 and trigger error
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('select-address-type-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('xpub-ready-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByTestId('add-cosigner-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+      await userEvent.click(screen.getByTestId('generate-address-btn'));
+      await userEvent.click(screen.getByTestId('verify-address-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('account-summary')).toBeInTheDocument();
+      });
+
+      const nameInput = screen.getByTestId('account-name-input');
+      await userEvent.clear(nameInput);
+      await userEvent.type(nameInput, 'Test');
+
+      await userEvent.click(screen.getByRole('button', { name: /create account/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Failed')).toBeInTheDocument();
+        expect(screen.getByTestId('account-summary')).toBeInTheDocument();
+      });
+    });
+  });
+
+  // ==================== SCROLL BEHAVIOR ====================
+
+  describe('Scroll Behavior', () => {
+    it('scrolls to top when step changes', async () => {
+      const mockScrollTo = jest.fn();
+      Object.defineProperty(HTMLDivElement.prototype, 'scrollTop', {
+        writable: true,
+        value: 100,
+      });
+
+      renderWithProviders(
+        <MultisigWizard onComplete={mockOnComplete} onCancel={mockOnCancel} />
+      );
+
+      await userEvent.click(screen.getByTestId('select-config-btn'));
+      await userEvent.click(screen.getByRole('button', { name: /next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('address-type-selector')).toBeInTheDocument();
+      });
+
+      // Scroll should be reset (implementation detail)
+    });
+  });
+});

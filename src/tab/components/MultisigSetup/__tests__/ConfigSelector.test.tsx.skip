@@ -1,0 +1,379 @@
+/**
+ * ConfigSelector Component Test Suite
+ *
+ * Comprehensive tests for the ConfigSelector component covering:
+ * - Initial rendering and layout
+ * - Configuration selection (2-of-2, 2-of-3, 3-of-5)
+ * - Risk level indicators
+ * - Recommended badge
+ * - Expand/collapse functionality
+ * - Continue button state
+ * - Callback invocation
+ * - Visual feedback
+ *
+ * Total Tests: 16
+ * Priority: P1 - Critical wizard step
+ */
+
+import React from 'react';
+import { screen, waitFor, within } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import { renderWithProviders, userEvent } from '../../__tests__/testUtils';
+import ConfigSelector from '../ConfigSelector';
+import { MultisigConfig } from '../../../../shared/types';
+
+describe('ConfigSelector', () => {
+  const mockOnSelect = jest.fn();
+  const mockOnContinue = jest.fn();
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  // ==================== RENDERING ====================
+
+  describe('Rendering', () => {
+    it('renders header and description', () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={undefined}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+        />
+      );
+
+      expect(screen.getByText('Choose Multisig Configuration')).toBeInTheDocument();
+      expect(screen.getByText('Select how many signatures will be required to send Bitcoin')).toBeInTheDocument();
+    });
+
+    it('renders all 3 configuration cards', () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={undefined}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+        />
+      );
+
+      expect(screen.getByText('2-of-2 Multisig')).toBeInTheDocument();
+      expect(screen.getByText('2-of-3 Multisig')).toBeInTheDocument();
+      expect(screen.getByText('3-of-5 Multisig')).toBeInTheDocument();
+    });
+
+    it('shows recommended badge on 2-of-3', () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={undefined}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+        />
+      );
+
+      expect(screen.getByText('⭐ Recommended')).toBeInTheDocument();
+    });
+
+    it('displays risk levels for each config', () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={undefined}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+        />
+      );
+
+      expect(screen.getByText('Higher Risk if Key Lost')).toBeInTheDocument();
+      expect(screen.getByText('Low Risk')).toBeInTheDocument();
+      expect(screen.getByText('Very Low Risk')).toBeInTheDocument();
+    });
+
+    it('shows signature requirements for each config', () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={undefined}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+        />
+      );
+
+      expect(screen.getByText('2 of 2')).toBeInTheDocument();
+      expect(screen.getByText('2 of 3')).toBeInTheDocument();
+      expect(screen.getByText('3 of 5')).toBeInTheDocument();
+    });
+
+    it('shows info box with recommendation', () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={undefined}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+        />
+      );
+
+      expect(screen.getByText('Not sure which to choose?')).toBeInTheDocument();
+      expect(screen.getByText(/We recommend/)).toBeInTheDocument();
+      expect(screen.getByText(/2-of-3 Multisig/)).toBeInTheDocument();
+    });
+
+    it('renders continue button when showContinueButton is true', () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={undefined}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+          showContinueButton={true}
+        />
+      );
+
+      expect(screen.getByRole('button', { name: /continue/i })).toBeInTheDocument();
+    });
+
+    it('does not render continue button when showContinueButton is false', () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={undefined}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+          showContinueButton={false}
+        />
+      );
+
+      expect(screen.queryByRole('button', { name: /continue/i })).not.toBeInTheDocument();
+    });
+  });
+
+  // ==================== SELECTION ====================
+
+  describe('Selection', () => {
+    it('calls onSelect when 2-of-2 card is clicked', async () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={undefined}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+        />
+      );
+
+      const card = screen.getByText('2-of-2 Multisig').closest('div[class*="rounded-2xl"]');
+      expect(card).toBeInTheDocument();
+      await userEvent.click(card!);
+
+      expect(mockOnSelect).toHaveBeenCalledWith('2-of-2');
+    });
+
+    it('calls onSelect when 2-of-3 card is clicked', async () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={undefined}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+        />
+      );
+
+      const card = screen.getByText('2-of-3 Multisig').closest('div[class*="rounded-2xl"]');
+      expect(card).toBeInTheDocument();
+      await userEvent.click(card!);
+
+      expect(mockOnSelect).toHaveBeenCalledWith('2-of-3');
+    });
+
+    it('calls onSelect when 3-of-5 card is clicked', async () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={undefined}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+        />
+      );
+
+      const card = screen.getByText('3-of-5 Multisig').closest('div[class*="rounded-2xl"]');
+      expect(card).toBeInTheDocument();
+      await userEvent.click(card!);
+
+      expect(mockOnSelect).toHaveBeenCalledWith('3-of-5');
+    });
+
+    it('shows selected state on 2-of-3 when selected', () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={'2-of-3' as MultisigConfig}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+        />
+      );
+
+      const card = screen.getByText('2-of-3 Multisig').closest('div[class*="rounded-2xl"]');
+      expect(card).toHaveClass('border-bitcoin');
+    });
+
+    it('shows radio button filled when config is selected', () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={'2-of-3' as MultisigConfig}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+        />
+      );
+
+      // The selected config should have a filled radio button
+      // This is a visual element, so we check for the presence of the inner circle
+      const card = screen.getByText('2-of-3 Multisig').closest('div[class*="rounded-2xl"]');
+      const radioInner = card?.querySelector('div[class*="w-2 h-2 rounded-full bg-white"]');
+      expect(radioInner).toBeInTheDocument();
+    });
+  });
+
+  // ==================== EXPAND/COLLAPSE ====================
+
+  describe('Expand/Collapse', () => {
+    it('shows collapsed state initially', () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={undefined}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+        />
+      );
+
+      expect(screen.queryByText('How it works:')).not.toBeInTheDocument();
+    });
+
+    it('expands when Learn more button is clicked', async () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={undefined}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+        />
+      );
+
+      const learnMoreButtons = screen.getAllByText('Learn more');
+      await userEvent.click(learnMoreButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getByText('How it works:')).toBeInTheDocument();
+      });
+    });
+
+    it('collapses when Show less button is clicked', async () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={undefined}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+        />
+      );
+
+      const learnMoreButtons = screen.getAllByText('Learn more');
+      await userEvent.click(learnMoreButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getByText('How it works:')).toBeInTheDocument();
+      });
+
+      const showLessButton = screen.getByText('Show less');
+      await userEvent.click(showLessButton);
+
+      await waitFor(() => {
+        expect(screen.queryByText('How it works:')).not.toBeInTheDocument();
+      });
+    });
+
+    it('shows warnings when expanded for 2-of-2', async () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={undefined}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+        />
+      );
+
+      const learnMoreButtons = screen.getAllByText('Learn more');
+      await userEvent.click(learnMoreButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getByText('Important considerations:')).toBeInTheDocument();
+      });
+    });
+
+    it('shows recommendation when expanded for 2-of-3', async () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={undefined}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+        />
+      );
+
+      const learnMoreButtons = screen.getAllByText('Learn more');
+      await userEvent.click(learnMoreButtons[1]); // 2-of-3 is second
+
+      await waitFor(() => {
+        expect(screen.getAllByText(/ideal for most users/i).length).toBeGreaterThan(0);
+      });
+    });
+
+    it('stops propagation when Learn more is clicked', async () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={undefined}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+        />
+      );
+
+      const learnMoreButtons = screen.getAllByText('Learn more');
+      await userEvent.click(learnMoreButtons[0]);
+
+      // onSelect should not be called when clicking the expand button
+      expect(mockOnSelect).not.toHaveBeenCalled();
+    });
+  });
+
+  // ==================== CONTINUE BUTTON ====================
+
+  describe('Continue Button', () => {
+    it('is disabled when no config is selected', () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={undefined}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+          showContinueButton={true}
+        />
+      );
+
+      const continueButton = screen.getByRole('button', { name: /continue/i });
+      expect(continueButton).toBeDisabled();
+    });
+
+    it('is enabled when a config is selected', () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={'2-of-3' as MultisigConfig}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+          showContinueButton={true}
+        />
+      );
+
+      const continueButton = screen.getByRole('button', { name: /continue/i });
+      expect(continueButton).toBeEnabled();
+    });
+
+    it('calls onContinue when clicked', async () => {
+      renderWithProviders(
+        <ConfigSelector
+          selectedConfig={'2-of-3' as MultisigConfig}
+          onSelect={mockOnSelect}
+          onContinue={mockOnContinue}
+          showContinueButton={true}
+        />
+      );
+
+      const continueButton = screen.getByRole('button', { name: /continue/i });
+      await userEvent.click(continueButton);
+
+      expect(mockOnContinue).toHaveBeenCalledTimes(1);
+    });
+  });
+});
