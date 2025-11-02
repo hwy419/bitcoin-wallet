@@ -1,11 +1,12 @@
 /**
  * Webpack plugin to fix WASM loading in Chrome extensions
- * Replaces fetch() calls with chrome.runtime.getURL() for all extension pages
+ * Replaces fetch() calls with chrome.runtime.getURL() for extension pages
+ * Uses different strategies for service workers vs regular extension pages
  */
 class ChromeExtensionWasmPlugin {
   apply(compiler) {
     compiler.hooks.emit.tapAsync('ChromeExtensionWasmPlugin', (compilation, callback) => {
-      // Process all JS assets that might load WASM (background, index, wizard)
+      // Process all JS assets that might load WASM
       const jsAssets = ['background.js', 'index.js', 'wizard.js'];
 
       jsAssets.forEach(assetName => {
@@ -14,12 +15,11 @@ class ChromeExtensionWasmPlugin {
         if (asset) {
           let source = asset.source();
 
-          // Replace the WASM fetch calls to use chrome.runtime.getURL with a variable
-          // Original: var req = fetch(__webpack_require__.p + "" + wasmModuleHash + ".module.wasm");
-          // New: var wasmUrl = __webpack_require__.p + "" + wasmModuleHash + ".module.wasm"; var req = fetch(chrome.runtime.getURL(wasmUrl));
+          // For all extension pages, use chrome.runtime.getURL to get proper extension:// URL
+          // Then fetch with proper headers
           source = source.replace(
             /var req = fetch\(__webpack_require__\.p\s*\+\s*""\s*\+\s*([a-zA-Z0-9_]+)\s*\+\s*"\.module\.wasm"\);/g,
-            'var wasmUrl = __webpack_require__.p + "" + $1 + ".module.wasm"; var req = fetch(chrome.runtime.getURL(wasmUrl));'
+            'var wasmUrl = chrome.runtime.getURL(($1 + ".module.wasm")); var req = fetch(wasmUrl);'
           );
 
           compilation.assets[assetName] = {
